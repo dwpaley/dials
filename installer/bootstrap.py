@@ -110,14 +110,6 @@ def install_miniconda(location):
 def install_conda(python):
     print()
 
-    if python in ("3.7", "3.8"):
-        print(
-            "\n",
-            "*" * 80 + "\n",
-            " Python version {python} is not supported yet.\n".format(python=python),
-            "*" * 80 + "\n\n",
-        )
-
     # Find relevant conda base installation
     conda_base = os.path.realpath("miniconda")
     if os.name == "nt":
@@ -1175,7 +1167,7 @@ be passed separately with quotes to avoid confusion (e.g
         "--python",
         help="Install this minor version of Python (default: %(default)s)",
         default="3.6",
-        choices=["3.6", "3.7", "3.8"],
+        choices=("3.6", "3.7", "3.8", "3.9"),
     )
     parser.add_argument(
         "--branch",
