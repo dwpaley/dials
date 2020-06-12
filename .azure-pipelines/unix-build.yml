@@ -169,8 +169,8 @@ steps:
     export DIALS_DATA=$(pwd)/data
     . dials
     cd modules/dials
-    pytest -v -ra -n auto --basetemp="$(Pipeline.Workspace)/tests" --durations=10 \
-        --timeout=5400 --regression --runslow || echo "##vso[task.complete result=Failed;]Some tests failed"
+    pytest -v -ra --basetemp="$(Pipeline.Workspace)/tests" --durations=10 \
+        --regression --runslow || echo "##vso[task.complete result=Failed;]Some tests failed"
   displayName: Run tests
   workingDirectory: $(Pipeline.Workspace)
 
