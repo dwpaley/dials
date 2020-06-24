@@ -2,8 +2,11 @@ from __future__ import absolute_import, division, print_function
 
 import concurrent.futures
 import copy
+import functools
 import logging
 import math
+import multiprocessing
+import sys
 
 import libtbx
 import libtbx.phil
@@ -243,7 +246,15 @@ def refined_settings_from_refined_triclinic(experiments, reflections, params):
             constrain_orient, space_group
         )
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=params.nproc) as pool:
+    if sys.hexversion >= 0x3070000:
+        ppe = functools.partial(
+            concurrent.futures.ProcessPoolExecutor,
+            mp_context=multiprocessing.get_context(method="fork"),
+        )
+    else:
+        ppe = functools.partial(concurrent.futures.ProcessPoolExecutor)
+
+    with ppe(max_workers=params.nproc) as pool:
         for i, result in enumerate(
             pool.map(
                 refine_subgroup,
