@@ -306,8 +306,8 @@ resolutionizer {
 
 def cc_half_fit(
     merging_statistics,
-    significance_level=None,
-    cc_half_method=None,
+    significance_level=0.1,
+    cc_half_method="half_dataset",
     cc_half_fit="tanh",
     limit=0.3,
 ):
