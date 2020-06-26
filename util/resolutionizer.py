@@ -304,6 +304,73 @@ resolutionizer {
 )
 
 
+def cc_half_fit(
+    merging_statistics,
+    significance_level=None,
+    cc_half_method=None,
+    cc_half_fit="tanh",
+    limit=0.3,
+):
+
+    if cc_half_method == "sigma_tau":
+        cc_s = flex.double(
+            [b.cc_one_half_sigma_tau for b in merging_statistics.bins]
+        ).reversed()
+    else:
+        cc_s = flex.double([b.cc_one_half for b in merging_statistics.bins]).reversed()
+    s_s = flex.double([1 / b.d_min ** 2 for b in merging_statistics.bins]).reversed()
+
+    i = 0
+    cc_half_critical_value = None
+    if significance_level is not None:
+        if cc_half_method == "sigma_tau":
+            significance = flex.bool(
+                [b.cc_one_half_sigma_tau_significance for b in merging_statistics.bins]
+            ).reversed()
+            cc_half_critical_value = flex.double(
+                [
+                    b.cc_one_half_sigma_tau_critical_value
+                    for b in merging_statistics.bins
+                ]
+            ).reversed()
+        else:
+            significance = flex.bool(
+                [b.cc_one_half_significance for b in merging_statistics.bins]
+            ).reversed()
+            cc_half_critical_value = flex.double(
+                [b.cc_one_half_critical_value for b in merging_statistics.bins]
+            ).reversed()
+        # index of last insignificant bin
+        i = flex.last_index(significance, False)
+        if i is None or i == len(significance) - 1:
+            i = 0
+        else:
+            i += 1
+
+    if cc_half_fit == "tanh":
+        cc_f = tanh_fit(s_s[i:], cc_s[i:], iqr_multiplier=4)
+    else:
+        cc_f = fit(s_s[i:], cc_s[i:], 6)
+
+    logger.debug("rch: fits")
+    rlimit = limit * max(cc_s)
+
+    for j, s in enumerate(s_s[i:]):
+        logger.debug("%f %f %f %f\n", s, 1.0 / math.sqrt(s), cc_s[i + j], cc_f[j])
+
+    try:
+        r_cc = 1.0 / math.sqrt(interpolate_value(s_s[i:], cc_f, rlimit))
+    except Exception:
+        r_cc = 1.0 / math.sqrt(max(s_s[i:]))
+    logger.debug("rch: done : %s", r_cc)
+
+    fit_data = (s_s[i:], cc_f)
+    experimental_data = (s_s, cc_s)
+    signficance_data = (s_s, cc_half_critical_value)
+
+    return r_cc, fit_data, experimental_data, signficance_data
+
+
 class resolution_plot(object):
     def __init__(self, ylabel):
         import matplotlib
@@ -691,75 +758,24 @@ class Resolutionizer(object):
         if limit is None:
             limit = self._params.cc_half
 
-        if self._params.cc_half_method == "sigma_tau":
-            cc_s = flex.double(
-                [b.cc_one_half_sigma_tau for b in self._merging_statistics.bins]
-            ).reversed()
-        else:
-            cc_s = flex.double(
-                [b.cc_one_half for b in self._merging_statistics.bins]
-            ).reversed()
-        s_s = flex.double(
-            [1 / b.d_min ** 2 for b in self._merging_statistics.bins]
-        ).reversed()
-
-        p = self._params.cc_half_significance_level
-        if p is not None:
-            if self._params.cc_half_method == "sigma_tau":
-                significance = flex.bool(
-                    [
-                        b.cc_one_half_sigma_tau_significance
-                        for b in self._merging_statistics.bins
-                    ]
-                ).reversed()
-                cc_half_critical_value = flex.double(
-                    [
-                        b.cc_one_half_sigma_tau_critical_value
-                        for b in self._merging_statistics.bins
-                    ]
-                ).reversed()
-            else:
-                significance = flex.bool(
-                    [b.cc_one_half_significance for b in self._merging_statistics.bins]
-                ).reversed()
-                cc_half_critical_value = flex.double(
-                    [
-                        b.cc_one_half_critical_value
-                        for b in self._merging_statistics.bins
-                    ]
-                ).reversed()
-            # index of last insignificant bin
-            i = flex.last_index(significance, False)
-            if i is None or i == len(significance) - 1:
-                i = 0
-            else:
-                i += 1
-        else:
-            i = 0
-        if self._params.cc_half_fit == "tanh":
-            cc_f = tanh_fit(s_s[i:], cc_s[i:], iqr_multiplier=4)
-        else:
-            cc_f = fit(s_s[i:], cc_s[i:], 6)
-
-        logger.debug("rch: fits")
-        rlimit = limit * max(cc_s)
-
-        for j, s in enumerate(s_s[i:]):
-            logger.debug("%f %f %f %f\n", s, 1.0 / math.sqrt(s), cc_s[i + j], cc_f[j])
-
-        try:
-            r_cc = 1.0 / math.sqrt(interpolate_value(s_s[i:], cc_f, rlimit))
-        except Exception:
-            r_cc = 1.0 / math.sqrt(max(s_s[i:]))
-        logger.debug("rch: done : %s", r_cc)
+        r_cc, fit_data, experimental_data, significance_data = cc_half_fit(
+            self._merging_statistics,
+            self._params.cc_half_significance_level,
+            self._params.cc_half_method,
+            self._params.cc_half_fit,
+            limit,
+        )
 
         if self._params.plot:
             plot = resolution_plot("CC1/2")
-            plot.plot(s_s[i:], cc_f, label="fit")
-            plot.plot(s_s, cc_s, label="CC1/2")
-            if p is not None:
+            plot.plot(fit_data[0], fit_data[1], label="fit")
+            plot.plot(experimental_data[0], experimental_data[1], label="CC1/2")
+            if self._params.cc_half_significance_level is not None:
                 plot.plot(
-                    s_s, cc_half_critical_value, label="Confidence limit (p=%g)" % p
+                    significance_data[0],
+                    significance_data[1],
+                    label="Confidence limit (p=%g)"
+                    % self._params.cc_half_significance_level,
                 )
             plot.plot_resolution_limit(r_cc)
             plot.savefig("cc_half.png")
